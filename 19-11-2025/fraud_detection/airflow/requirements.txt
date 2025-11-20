@@ -1,0 +1,31 @@
+# --- Core Data & ML ---
+pandas
+numpy
+scikit-learn
+xgboost
+catboost
+lightgbm
+imblearn
+joblib
+tqdm
+
+# --- Airflow & Azure ---
+apache-airflow-providers-microsoft-azure
+azure-storage-blob
+azure-identity
+
+# --- M4N_DISTRO / Rust Communication ---
+# Required to send commands to your Rust workers
+grpcio
+grpcio-tools
+protobuf
+
+# --- Event Streaming ---
+kafka-python
+
+# --- MLOps Tracking ---
+mlflow>=2.8.0
+
+# --- Utilities ---
+python-dotenv
+pyyaml
