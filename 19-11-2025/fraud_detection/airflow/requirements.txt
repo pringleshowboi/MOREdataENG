@@ -1,31 +1,43 @@
-# --- Core Data & ML ---
+--- Core Data & ML ---
+
 pandas
 numpy
 scikit-learn
 xgboost
 catboost
 lightgbm
-imblearn
 joblib
 tqdm
 
-# --- Airflow & Azure ---
+The imbalanced-learn package provides the SMOTE module
+
+imbalanced-learn
+
+imblearn is often used as the package name, including it for completeness
+
+imblearn
+
+--- Airflow & Azure ---
+
 apache-airflow-providers-microsoft-azure
 azure-storage-blob
 azure-identity
 
-# --- M4N_DISTRO / Rust Communication ---
-# Required to send commands to your Rust workers
+--- M4N_DISTRO / Rust Communication ---
+
 grpcio
 grpcio-tools
 protobuf
 
-# --- Event Streaming ---
+--- Event Streaming ---
+
 kafka-python
 
-# --- MLOps Tracking ---
+--- MLOps Tracking ---
+
 mlflow>=2.8.0
 
-# --- Utilities ---
+--- Utilities ---
+
 python-dotenv
 pyyaml

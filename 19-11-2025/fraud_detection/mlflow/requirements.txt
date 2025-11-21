@@ -11,4 +11,7 @@ psycopg2-binary>=2.9.9
 # --- Security ---
 cryptography>=3.4.8
 
-# (These belong in Airflow/Training, not the Tracking Server)
+kafka-python
+faker
+numpy
+pandas
