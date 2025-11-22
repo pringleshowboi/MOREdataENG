@@ -21,6 +21,32 @@ from kafka.errors import KafkaError
 import mlflow
 from mlflow.tracking import MlflowClient
 
+# ===== MLFLOW HOST HEADER FIX =====
+import requests
+
+def patch_mlflow_requests():
+    """Patches requests.Session to fix MLflow Host header validation in Docker"""
+    if getattr(requests.Session.request, '__name__', '') == 'patched_request':
+        print("✅ MLflow Host Header Patch already applied")
+        return
+    
+    original_request = requests.Session.request
+    
+    def patched_request(self, method, url, **kwargs):
+        headers = kwargs.get('headers', {})
+        if 'mlflow-server' in url:
+            headers['Host'] = 'localhost:5000'
+            print(f"🔧 Patched MLflow request to: {url}")
+        kwargs['headers'] = headers
+        return original_request(self, method, url, **kwargs)
+    
+    requests.Session.request = patched_request
+    print("✅ MLflow Host Header Patch applied successfully")
+
+# Apply the patch
+patch_mlflow_requests()
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

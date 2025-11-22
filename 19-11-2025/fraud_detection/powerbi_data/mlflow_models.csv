@@ -1,0 +1,3 @@
+model_name,version,current_stage,creation_time,last_updated_time,run_id,status
+FraudDetectionRFModel,2,Staging,1763837610371,1763837610622,dcbfb811b09142dea53d733a522476b2,READY
+FraudDetectionRFModel,1,None,1763837600510,1763837600510,dcbfb811b09142dea53d733a522476b2,READY

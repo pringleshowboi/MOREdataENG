@@ -1,0 +1,6 @@
+id,transaction_id,user_id,amount,location,is_simulated_fraud,prediction,fraud_probability,is_fraud,model_version,scored_at
+1,txn_001,user_alice,125.5,US,f,0,0.05,f,v1,2025-11-22 19:14:40.745435
+2,txn_002,user_bob,8500,NG,t,1,0.98,t,v1,2025-11-22 19:14:40.745435
+3,txn_003,user_charlie,45.2,UK,f,0,0.12,f,v1,2025-11-22 19:14:40.745435
+4,txn_004,user_david,2300.75,RU,t,1,0.87,t,v1,2025-11-22 19:14:40.745435
+5,txn_005,user_eve,67.3,CA,f,0,0.08,f,v1,2025-11-22 19:14:40.745435

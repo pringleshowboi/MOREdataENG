@@ -21,10 +21,16 @@
 #
 # WARNING: This configuration is for local development.
 ---
+networks:
+  mlops-net:
+    driver: bridge
+    
 x-airflow-common:
   &airflow-common
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.3}
-  build: ./airflow
+  image: ${AIRFLOW_IMAGE_NAME:-fraud-detection-airflow:latest}
+  build:
+    context: ./airflow
+    dockerfile: Dockerfile
   env_file:
     - ${ENV_FILE_PATH:-.env}
   environment:
@@ -39,12 +45,10 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # Dependencies for Azure/Kafka/MLflow integration
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-apache-airflow-providers-microsoft-azure apache-airflow-providers-cncf-kubernetes azure-storage-blob grpcio grpcio-tools protobuf pandas apache-airflow-providers-postgres confluent-kafka}
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
-    # MLflow Configuration (Pointing to internal docker service)
+    # MLflow Configuration
     MLFLOW_TRACKING_URI: 'http://mlflow-server:5000'
-    # Azure Storage Configuration for Artifacts
+    # Azure Storage Configuration
     AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
     AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
     AZURE_STORAGE_ACCESS_KEY: ${AZURE_STORAGE_ACCESS_KEY}
@@ -71,6 +75,8 @@ services:
     image: confluentinc/cp-zookeeper:7.5.0
     hostname: zookeeper
     container_name: zookeeper
+    networks:
+      - mlops-net
     ports:
       - "2181:2181"
     environment:
@@ -87,6 +93,8 @@ services:
     image: confluentinc/cp-kafka:7.5.0
     hostname: kafka
     container_name: kafka
+    networks:
+      - mlops-net
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -121,27 +129,32 @@ services:
     restart: always
     build: ./mlflow
     image: mlflow-server
+    networks:
+      - mlops-net
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - "5000:5000"
     environment:
-      # Connects to the dedicated airflow_mlflow database created by the init script
       MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://airflow:airflow@postgres/airflow_mlflow
-      # Azure Blob Storage for Artifacts
       MLFLOW_DEFAULT_ARTIFACT_ROOT: wasbs://${AZURE_CONTAINER_NAME:-mlflow}@${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/
       AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
       AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       AZURE_STORAGE_ACCESS_KEY: ${AZURE_STORAGE_ACCESS_KEY}
+      # Disable Host header checking in Werkzeug
+      WERKZEUG_DEBUG_PIN: "off"
+      FLASK_ENV: development
     command: >
-      mlflow server
+      sh -c "mlflow server
       --host 0.0.0.0
       --port 5000
       --backend-store-uri postgresql+psycopg2://airflow:airflow@postgres/airflow_mlflow
       --default-artifact-root wasbs://${AZURE_CONTAINER_NAME:-mlflow}@${AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/
+      --serve-artifacts
+      --dev"
     healthcheck:
-      # Check if MLflow process is running - most reliable approach
-      test: ["CMD-SHELL", "ps aux | grep -v grep | grep 'mlflow server' || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -155,6 +168,8 @@ services:
       context: ./producer
       dockerfile: Dockerfile
     container_name: fraud_producer
+    networks:
+      - mlops-net
     depends_on:
       kafka:
         condition: service_healthy
@@ -168,6 +183,8 @@ services:
       context: ./inference
       dockerfile: Dockerfile
     container_name: fraud_inference_consumer
+    networks:
+      - mlops-net
     depends_on:
       kafka:
         condition: service_healthy
@@ -194,20 +211,62 @@ services:
       start_period: 45s
 
   # ----------------------------------------------------
+  # NEW: MONITORING CONSUMER FOR POWERBI
+  # ----------------------------------------------------
+  monitoring-consumer:
+    build:
+      context: ./monitoring
+      dockerfile: Dockerfile
+    container_name: fraud_monitoring_consumer
+    networks:
+      - mlops-net
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      # Kafka Configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_OUTPUT_TOPIC: scored_transactions
+      KAFKA_MONITORING_GROUP: fraud-monitoring-group
+      # PostgreSQL Configuration
+      POSTGRES_DB: mlops
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      DB_TABLE: real_time_scores
+      # Batch Configuration
+      DB_BATCH_SIZE: 50
+      LOG_LEVEL: INFO
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep python || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # ----------------------------------------------------
   # 4. AIRFLOW CORE SERVICES
   # ----------------------------------------------------
   postgres:
     image: postgres:16
+    networks:
+      - mlops-net
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
-      POSTGRES_MULTIPLE_DATABASES: airflow_mlflow
+      POSTGRES_MULTIPLE_DATABASES: airflow_mlflow,mlops
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
       # DB Initialization Scripts
       - ./init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
       - ./config/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
@@ -217,6 +276,8 @@ services:
 
   redis:
     image: redis:7.2-bookworm
+    networks:
+      - mlops-net
     expose:
       - 6379
     healthcheck:
@@ -230,6 +291,8 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: webserver
+    networks:
+      - mlops-net
     ports:
       - "8085:8080"
     healthcheck:
@@ -247,14 +310,20 @@ services:
   airflow-apiserver:
     <<: *airflow-common
     command: api-server
+    networks:
+      - mlops-net
     ports:
       - "8081:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v2/version || exit 1"]
+      interval: 45s
+      timeout: 30s
       retries: 5
-      start_period: 120s
+      start_period: 180s
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -264,6 +333,8 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    networks:
+      - mlops-net
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
@@ -279,6 +350,8 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
+    networks:
+      - mlops-net
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
       interval: 30s
@@ -291,10 +364,17 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-
   airflow-worker:
     <<: *airflow-common
     command: celery worker
+    networks:
+      - mlops-net
+    deploy:
+      resources:
+        limits:
+          memory: 4096m
+        reservations:
+          memory: 2048m
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -317,6 +397,8 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
+    networks:
+      - mlops-net
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
       interval: 30s
@@ -331,8 +413,9 @@ services:
 
   airflow-init:
     <<: *airflow-common
+    networks:
+      - mlops-net
     entrypoint: /bin/bash
-    # Standard Airflow initialization script
     command:
       - -c
       - |
@@ -422,6 +505,8 @@ services:
 
   airflow-cli:
     <<: *airflow-common
+    networks:
+      - mlops-net
     profiles:
       - debug
     environment:
@@ -437,6 +522,8 @@ services:
   flower:
     <<: *airflow-common
     command: celery flower
+    networks:
+      - mlops-net
     profiles:
       - flower
     ports:
