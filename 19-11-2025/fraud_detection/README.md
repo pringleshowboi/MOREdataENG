@@ -1,149 +1,92 @@
-🛡️ MLOps Fraud Detection Dashboard
+# 🛡️ MLOps Fraud Detection Dashboard
 
-Project Summary
+## Overview
 
-This project establishes a robust, end-to-end dashboard designed for monitoring a machine learning-powered fraud detection system. It serves two distinct audiences:
+This project delivers a **production-ready, end-to-end dashboard** for monitoring a machine-learning–powered fraud detection system.  
+It is designed to serve two primary user groups:
 
-Fraud Operations Analysts: Who require real-time alerts and performance indicators to manage daily operations.
+- **Fraud Operations Analysts** – who require real-time alerts, monitoring, and operational KPIs.  
+- **Data Scientists / ML Engineers** – who need visibility into model health, performance trends, and data drift through core MLOps metrics.
 
-Data Scientists/ML Engineers: Who need MLOps metrics to track model health, detect data drift, and monitor model performance over time.
+The dashboard unifies multiple data sources using a star-schema-like structure and DAX measures to generate dynamic insights.
 
-Data Model Overview
+---
 
-The dashboard integrates three data sources to create a unified view, leveraging DAX measures for dynamic calculation and performance tracking.
+## 📘 Data Model Overview
 
-Table
+The dashboard integrates **three main tables** and one **baseline dataset**, joined primarily on `version` where applicable. DAX measures drive most KPIs and interactive visuals.
 
-Purpose
+| Table | Purpose | Relationship |
+|-------|---------|--------------|
+| **Fact_RealTimeScores** | Stores each live transaction, the model’s fraud score (`fraud_probability`), and the actual outcome (`is_fraud`). *(Fact table)* | Many-to-One → **Dim_Model.version** |
+| **Dim_Model** | Stores model metadata, version history, and deployment stage (e.g., *Production, Staging*). *(Dimension table)* | One-to-Many → **Fact tables** |
+| **Fact_Metrics** | Contains historical offline performance metrics such as ROC-AUC, F1, and Precision for each model version. *(Fact table)* | Many-to-One → **Dim_Model.version** |
+| **creditcard_training** | Baseline training dataset used for drift detection. | No active relationship |
 
-Relationship
+---
 
-Fact_RealTimeScores
+## 🧮 Key DAX Measures
 
-Stores every transaction and the model's fraud probability score (fraud_probability) and the outcome (is_fraud). (Fact Table)
+These measures power the dashboard’s KPIs and real-time insights:
 
-Many-to-One (version)
+- **Total_Transactions** – total transaction count.
+- **Live_Fraud_Count** – number of fraud predictions (`is_fraud = 1`).
+- **Live_Fraud_Rate** – fraud alerts as a percentage of all transactions.  
+  *Formula: `[Live_Fraud_Count] / [Total_Transactions]`*
+- **Average_Confidence** – mean model prediction confidence.
+- **Current_Model_Version** – currently deployed model version (from `current_stage = "Production"`).
 
-Dim_Model
+---
 
-Stores model metadata, version history, and current deployment stage (e.g., 'Production', 'Staging') from an MLflow-like registry. (Dimension Table)
+## 📊 Dashboard Pages
 
-One-to-Many (version)
+### 1. 🟢 Real-Time Operational Monitor  
+**Audience: Fraud Analysts**
 
-Fact_Metrics
+Supports day-to-day operations with instant visibility into live system behavior.
 
-Stores offline performance metrics (ROC-AUC, F1-Score, Precision) for every historical model version. (Fact Table)
+| Visual | Data / Measure | Purpose |
+|--------|----------------|---------|
+| **KPI Cards** | `[Total_Transactions]`, `[Live_Fraud_Count]`, `[Live_Fraud_Rate]`, `[Average_Confidence]`, `[Current_Model_Version]` | Quick snapshot of current performance and system health. |
+| **Map Visual** | Location field (size by `[Total_Transactions]`) | Shows live transaction flow and fraud hotspot regions. |
+| **Live Alerts Table** | Transaction ID, Amount, fraud_probability | Prioritized list of high-confidence fraud alerts (e.g., ≥ 0.85). |
+| **Volume Trend Chart** | `[Total_Transactions]` over `scored_at` | Confirms stable data ingestion and traffic patterns. |
 
-Many-to-One (version)
+---
 
-creditcard_training
+### 2. 📈 Model Performance History  
+**Audience: ML Engineers**
 
-Provides a baseline dataset representing the model's original training data for drift detection.
+Tracks historical model performance based on stored offline evaluation metrics.
 
-No Active Relationship
+| Visual | Data Source | Purpose |
+|--------|-------------|---------|
+| **ROC-AUC Trend** | `Fact_Metrics[roc_auc]` vs. `Dim_Model[registration_date]` | Monitors long-term model quality across versions. |
+| **F1-Score Comparison** | `Fact_Metrics[f1_score]` vs. `Dim_Model[version]` | Version-to-version comparison aligned with business needs. |
+| **Production Version Card** | `[Current_Model_Version]` filtered by `current_stage = "Production"` | Connects historical metrics with the model currently scoring live transactions. |
 
-Key DAX Measures
+---
 
-These calculations are the backbone of the dashboard's KPIs and logic:
+### 3. 📉 Data Drift & Verification  
+**Audience: Data Scientists**
 
-Total_Transactions: Counts total volume for operational monitoring.
+Detects shifts in data distributions compared to the training dataset.
 
-Live_Fraud_Count: Counts transactions where the model predicted fraud (is_fraud = 1).
+| Visual | Data Source | Purpose |
+|--------|-------------|---------|
+| **Amount Distribution Comparison** | Binned `amount` values in live vs. training data | Primary indicator of feature drift; deviations suggest retraining. |
+| **Confidence Trend (KPI)** | `[Average_Confidence]` over time | Detects concept drift; falling confidence implies new unseen patterns. |
+| **Location Distribution** | Side-by-side pie charts (training vs. live data) | Reveals shifts in geographic patterns influencing fraud patterns. |
 
-Live_Fraud_Rate: Calculates the percentage of fraud alerts ([Live_Fraud_Count] / [Total_Transactions]).
+---
 
-Average_Confidence: Calculates the model's mean prediction certainty for a health check.
+## ✔️ Summary
 
-Current_Model_Version: Identifies the version of the model currently in production.
+This dashboard provides:
 
-Dashboard Pages
+- **Operational intelligence** for real-time fraud detection.  
+- **MLOps visibility** for model lifecycle management.  
+- **Data drift safeguards** to ensure long-term model reliability.  
 
-1. 🟢 Real-Time Operational Monitor (Audience: Analysts)
-
-This page focuses on immediate action and current performance.
-
-Visual
-
-Data Source / Measure
-
-Function
-
-KPI Cards
-
-[Total_Transactions], [Live_Fraud_Count], [Live_Fraud_Rate], [Average_Confidence], [Current_Model_Version]
-
-Provides a single-glance overview of volume and performance against operational targets.
-
-Map Visual
-
-location field (Size by [Total_Transactions])
-
-Identifies the geographic origin of live transaction flow and fraud alerts.
-
-Live Alerts Table
-
-Transaction details (ID, Amount, Probability)
-
-Crucially filtered to only show high-confidence fraud alerts (e.g., fraud_probability $\ge 0.85$) to focus analyst effort.
-
-Volume Trend Chart
-
-[Total_Transactions] vs. scored_at (time)
-
-Confirms data pipeline health and transaction flow consistency.
-
-2. 📈 Model Performance History (Audience: ML Engineers)
-
-This page tracks the success and quality of models over the project lifecycle, using data from the Fact_Metrics table.
-
-Visual
-
-Data Source
-
-Function
-
-ROC-AUC Trend
-
-Fact_Metrics[roc_auc] vs. Dim_Model[registration_date]
-
-Monitors the model's core quality metric (ROC-AUC) across deployed versions, indicating long-term performance improvements or degradation.
-
-F1-Score Comparison
-
-Fact_Metrics[f1_score] vs. Dim_Model[version]
-
-Compares specific versions side-by-side using a key business-aligned metric (F1-Score).
-
-Production Version Card
-
-[Current_Model_Version] (Filtered by current_stage = 'Production')
-
-Provides the crucial link between the historic performance data and the version currently handling live traffic.
-
-3. 📉 Data Drift and Verification (Audience: Data Scientists)
-
-This page monitors the relationship between the incoming live data and the original training data to detect feature drift.
-
-Visual
-
-Data Source
-
-Function
-
-Amount Distribution Comparison
-
-Dual-axis chart comparing Count of Live Data vs. Count of Training Data grouped by amount (bins).
-
-The primary visual for Data Drift detection. A significant divergence indicates the need for model retraining.
-
-Confidence Trend (KPI)
-
-[Average_Confidence] vs. scored_at (time)
-
-Detects Concept Drift. A sudden, sustained drop in confidence implies the model is seeing brand-new patterns or features.
-
-Location Distribution
-
-Two side-by-side pie charts: one for creditcard_training location counts, and one for Fact_RealTimeScores location counts.
-
-Compares the geographic mix of the current data against the baseline to catch emerging regional patterns.
+It delivers a complete, maintainable monitoring solution for high-risk fraud detection environments.
+![real-time-dashboard](image.png)
