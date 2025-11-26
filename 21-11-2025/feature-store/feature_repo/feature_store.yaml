@@ -1,0 +1,17 @@
+project: feature_store_project
+registry: data/registry.db
+provider: local
+
+offline_store:
+  # Using the Postgres service defined in your docker-compose
+  type: postgres
+  host: postgres
+  port: 5432
+  database: airflow
+  user: airflow
+  password: airflow
+
+online_store:
+  # Using the Redis service defined in your docker-compose
+  type: redis
+  connection_string: "redis:6379,decode_responses=True"

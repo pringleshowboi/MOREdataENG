@@ -1,0 +1,6 @@
+feast
+pandas
+redis
+psycopg2-binary
+psycopg[binary]
+psycopg-pool
