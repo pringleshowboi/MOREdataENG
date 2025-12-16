@@ -1,0 +1,20 @@
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:7071']
+
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9090']
+
+  - job_name: 'cadvisor' # Renamed job_name to be clear
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  - job_name: 'airflow_worker'
+    static_configs:
+      - targets: ['airflow-worker:8000']
